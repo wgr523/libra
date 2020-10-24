@@ -7,13 +7,15 @@ use crate::{
     Error,
 };
 use consensus_types::{common::Author, safety_data::SafetyData};
-use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
+use libra_crypto::{
+    ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
+    hash::CryptoHash,
+};
 use libra_global_constants::{CONSENSUS_KEY, EXECUTION_KEY, OWNER_ACCOUNT, SAFETY_DATA, WAYPOINT};
 use libra_logger::prelude::*;
 use libra_secure_storage::{CryptoStorage, KVStorage, Storage};
 use libra_types::waypoint::Waypoint;
 use serde::Serialize;
-use libra_crypto::hash::CryptoHash;
 
 /// SafetyRules needs an abstract storage interface to act as a common utility for storing
 /// persistent data to local disk, cloud, secrets managers, or even memory (for tests)

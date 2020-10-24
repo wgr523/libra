@@ -537,7 +537,7 @@ fn test_sign_proposal_with_bad_signer(safety_rules: &Callback) {
         .unwrap_err();
     assert_eq!(
         err,
-        Error::InvalidProposal("Proposal author is not validator signer!".into())
+        Error::InvalidProposal("Proposal author is not validator handle!".into())
     );
 }
 
@@ -607,7 +607,7 @@ fn test_sign_proposal_with_early_preferred_round(safety_rules: &Callback) {
 }
 
 fn test_uninitialized_signer(safety_rules: &Callback) {
-    // Testing for an uninitialized Option<ValidatorSigner>
+    // Testing for an uninitialized Option<ValidatorHandle>
 
     let (mut safety_rules, signer, key) = safety_rules();
 
@@ -616,11 +616,11 @@ fn test_uninitialized_signer(safety_rules: &Callback) {
 
     let a1 = test_utils::make_proposal_with_qc(round + 1, genesis_qc, &signer, key.as_ref());
     let err = safety_rules.construct_and_sign_vote(&a1).unwrap_err();
-    assert_eq!(err, Error::NotInitialized("validator_signer".into()));
+    assert_eq!(err, Error::NotInitialized("validator_handle".into()));
     let err = safety_rules
         .sign_proposal(a1.block().block_data().clone())
         .unwrap_err();
-    assert_eq!(err, Error::NotInitialized("validator_signer".into()));
+    assert_eq!(err, Error::NotInitialized("validator_handle".into()));
 
     safety_rules.initialize(&proof).unwrap();
     safety_rules.construct_and_sign_vote(&a1).unwrap();
@@ -638,13 +638,13 @@ fn test_validator_not_in_set(safety_rules: &Callback) {
 
     safety_rules.initialize(&proof).unwrap();
 
-    // validator_signer is set during initialization
+    // validator_handle is set during initialization
     let state = safety_rules.consensus_state().unwrap();
     assert_eq!(state.in_validator_set(), true);
 
     let a1 = test_utils::make_proposal_with_qc(round + 1, genesis_qc, &signer, key.as_ref());
 
-    // remove the validator_signer in next epoch
+    // remove the validator_handle in next epoch
     let mut next_epoch_state = EpochState::empty();
     next_epoch_state.epoch = 1;
     let rand_signer = ValidatorSigner::random([0xfu8; 32]);

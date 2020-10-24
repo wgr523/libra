@@ -23,16 +23,17 @@ use consensus_types::{
 };
 use libra_crypto::{
     ed25519::{Ed25519PublicKey, Ed25519Signature},
-    hash::HashValue,
+    hash::{CryptoHash, HashValue},
     traits::Signature,
 };
+use libra_global_constants::CONSENSUS_KEY;
 use libra_logger::prelude::*;
 use libra_types::{
     block_info::BlockInfo, epoch_change::EpochChangeProof, epoch_state::EpochState,
     ledger_info::LedgerInfo, waypoint::Waypoint,
 };
+use serde::Serialize;
 use std::cmp::Ordering;
-use libra_global_constants::CONSENSUS_KEY;
 
 /// @TODO consider a cache of verified QCs to cut down on verification costs
 pub struct SafetyRules {
@@ -70,6 +71,14 @@ impl SafetyRules {
         self.validator_handle
             .as_ref()
             .ok_or_else(|| Error::NotInitialized("validator_handle".into()))
+    }
+
+    fn sign<T: Serialize + CryptoHash>(&mut self, message: &T) -> Result<Ed25519Signature, Error> {
+        let validator_handle = self.validator_handle()?;
+        let key_name = validator_handle.key_name();
+        let key_version = validator_handle.key_version();
+
+        self.persistent_storage.sign(key_name, key_version, message)
     }
 
     fn epoch_state(&self) -> Result<&EpochState, Error> {
@@ -253,7 +262,29 @@ impl SafetyRules {
         if let Some(expected_key) = epoch_state.verifier.get_public_key(&author) {
             let curr_key = self.validator_handle().ok().map(|s| s.key_version());
             if curr_key != Some(expected_key.clone()) {
-                self.validator_handle = Some(ValidatorHandle::new(author, CONSENSUS_KEY.into(), expected_key));
+                let validator_handle = Some(ValidatorHandle::new(
+                    author,
+                    CONSENSUS_KEY.into(),
+                    expected_key,
+                ));
+                self.validator_handle = validator_handle;
+
+                // Try to generate a signature over a test message to ensure the current validator
+                // handle points to a key actually held in storage. If not, storage doesn't
+                // have the expected key, so return an error.
+                if let Err(error) = self.sign(&Timeout::new(0, 0)) {
+                    let error = Error::InternalError(format!(
+                        "Validator key not found: {:?}",
+                        error.to_string()
+                    ));
+                    error!(
+                        SafetyLogSchema::new(LogEntry::KeyReconciliation, LogEvent::Error)
+                            .error(&error),
+                    );
+
+                    self.validator_handle = None;
+                    return Err(error);
+                };
             }
 
             debug!(
@@ -334,12 +365,16 @@ impl SafetyRules {
             &mut safety_data,
         )?;
 
-        let validator_handle = self.validator_handle()?;
-        let vote = Vote::new(
-            self.extension_check(vote_proposal)?,
-            validator_handle.author(),
-            self.construct_ledger_info(proposed_block)?,
-            validator_handle,
+        // Construct and sign vote
+        let vote_data = self.extension_check(vote_proposal)?;
+        let mut ledger_info_placeholder = self.construct_ledger_info(proposed_block)?;
+        ledger_info_placeholder.set_consensus_data_hash(vote_data.hash());
+        let signature = self.sign(&ledger_info_placeholder)?;
+        let vote = Vote::new_with_signature(
+            vote_data,
+            self.validator_handle()?.author(),
+            ledger_info_placeholder,
+            signature,
         );
 
         safety_data.last_vote = Some(vote.clone());
@@ -368,9 +403,9 @@ impl SafetyRules {
             self.persistent_storage.set_safety_data(safety_data)?;
         }
 
-        Ok(Block::new_proposal_from_block_data(
-            block_data,
-            self.validator_handle()?,
+        let signature = self.sign(&block_data)?;
+        Ok(Block::new_proposal_from_block_data_and_signature(
+            block_data, signature,
         ))
     }
 
@@ -397,7 +432,7 @@ impl SafetyRules {
             self.persistent_storage.set_safety_data(safety_data)?;
         }
 
-        let signature = timeout.sign(self.validator_handle()?);
+        let signature = self.sign(timeout)?;
         Ok(signature)
     }
 }
