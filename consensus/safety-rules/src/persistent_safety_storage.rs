@@ -7,11 +7,13 @@ use crate::{
     Error,
 };
 use consensus_types::{common::Author, safety_data::SafetyData};
-use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
+use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
 use libra_global_constants::{CONSENSUS_KEY, EXECUTION_KEY, OWNER_ACCOUNT, SAFETY_DATA, WAYPOINT};
 use libra_logger::prelude::*;
 use libra_secure_storage::{CryptoStorage, KVStorage, Storage};
 use libra_types::waypoint::Waypoint;
+use serde::Serialize;
+use libra_crypto::hash::CryptoHash;
 
 /// SafetyRules needs an abstract storage interface to act as a common utility for storing
 /// persistent data to local disk, cloud, secrets managers, or even memory (for tests)
@@ -96,22 +98,23 @@ impl PersistentSafetyStorage {
         Ok(self.internal_store.get(OWNER_ACCOUNT).map(|v| v.value)?)
     }
 
-    pub fn consensus_key_for_version(
-        &self,
-        version: Ed25519PublicKey,
-    ) -> Result<Ed25519PrivateKey, Error> {
-        let _timer = counters::start_timer("get", CONSENSUS_KEY);
-        Ok(self
-            .internal_store
-            .export_private_key_for_version(CONSENSUS_KEY, version)?)
-    }
-
     pub fn execution_public_key(&self) -> Result<Ed25519PublicKey, Error> {
         let _timer = counters::start_timer("get", EXECUTION_KEY);
         Ok(self
             .internal_store
             .get_public_key(EXECUTION_KEY)
             .map(|r| r.public_key)?)
+    }
+
+    pub fn sign<T: Serialize + CryptoHash>(
+        &mut self,
+        key_name: String,
+        key_version: Ed25519PublicKey,
+        message: &T,
+    ) -> Result<Ed25519Signature, Error> {
+        Ok(self
+            .internal_store
+            .sign_using_version(&key_name, key_version, message)?)
     }
 
     pub fn safety_data(&mut self) -> Result<SafetyData, Error> {
