@@ -9,7 +9,7 @@
 #![forbid(unsafe_code)]
 
 /// Definitions of global cryptographic keys (e.g., as held in secure storage)
-pub const CONSENSUS_KEY: &str = "consensus";
+pub const CONSENSUS_KEY: &str = "consensus_v2";
 pub const EXECUTION_KEY: &str = "execution";
 pub const FULLNODE_NETWORK_KEY: &str = "fullnode_network";
 pub const LIBRA_ROOT_KEY: &str = "libra_root";
