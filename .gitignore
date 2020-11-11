@@ -51,3 +51,6 @@ target-out-docker
 
 # Doc generation output
 *.md.old
+
+# Jupyter notebook
+**.ipynb_checkpoints**

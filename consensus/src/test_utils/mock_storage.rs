@@ -23,7 +23,7 @@ use std::{
     sync::Arc,
 };
 use storage_interface::DbReader;
-
+use libra_logger::info;
 pub struct MockSharedStorage {
     // Safety state
     pub block: Mutex<HashMap<HashValue, Block>>,
@@ -158,6 +158,7 @@ impl PersistentLivenessStorage for MockStorage {
             self.shared_storage.block.lock().insert(block.id(), block);
         }
         for qc in quorum_certs {
+            info!("{{\"quorum_cert\":{}}}", serde_json::to_string(&qc).unwrap());
             self.shared_storage
                 .qc
                 .lock()

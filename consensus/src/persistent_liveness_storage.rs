@@ -289,6 +289,9 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         for block in blocks.iter() {
             trace_code_block!("consensusdb::save_tree", {"block", block.id()}, trace_batch);
         }
+        for qc in quorum_certs.iter() {
+            info!("{{\"quorum_cert\":{}}}", serde_json::to_string(&qc).unwrap());
+        }
         Ok(self
             .db
             .save_blocks_and_quorum_certificates(blocks, quorum_certs)?)
