@@ -39,6 +39,8 @@ mod util;
 pub mod consensus_provider;
 /// LibraNet interface.
 pub mod network_interface;
+/// Forensic
+pub mod forensic_storage;
 
 #[cfg(feature = "fuzzing")]
 pub use round_manager::round_manager_fuzzing;

@@ -5,10 +5,11 @@
 mod consensusdb_test;
 mod schema;
 
+pub(crate) use schema::quorum_certificate::QCSchema;
+
 use crate::{
     consensusdb::schema::{
         block::BlockSchema,
-        quorum_certificate::QCSchema,
         single_entry::{SingleEntryKey, SingleEntrySchema},
     },
     error::DbError,
