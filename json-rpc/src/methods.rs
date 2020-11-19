@@ -38,10 +38,14 @@ use std::{
     sync::Arc,
 };
 use storage_interface::{DbReader, Order};
+use consensus::forensic_storage::ForensicStorage;
+use libra_types::block_info::Round;
+use consensus_types::quorum_cert::QuorumCert;
 
 #[derive(Clone)]
 pub(crate) struct JsonRpcService {
     db: Arc<dyn DbReader>,
+    forensic_db: Arc<dyn ForensicStorage>,
     mempool_sender: MempoolClientSender,
     role: RoleType,
     chain_id: ChainId,
@@ -52,6 +56,7 @@ pub(crate) struct JsonRpcService {
 impl JsonRpcService {
     pub fn new(
         db: Arc<dyn DbReader>,
+        forensic_db: Arc<dyn ForensicStorage>,
         mempool_sender: MempoolClientSender,
         role: RoleType,
         chain_id: ChainId,
@@ -60,6 +65,7 @@ impl JsonRpcService {
     ) -> Self {
         Self {
             db,
+            forensic_db,
             mempool_sender,
             role,
             chain_id,
@@ -591,6 +597,25 @@ async fn get_network_status(service: JsonRpcService, _request: JsonRpcRequest) -
     Ok(peers.get() as u64)
 }
 
+/// Test rpc, echo the integer
+async fn test_rpc(
+    _service: JsonRpcService,
+    request: JsonRpcRequest,
+) -> Result<u64> {
+    let arg: u64 = request.parse_param(0, "arg")?;
+
+    Ok(arg)
+}
+
+/// Test: read qc at round 1
+async fn test_forensic(
+    service: JsonRpcService,
+    request: JsonRpcRequest,
+) -> Result<Vec<QuorumCert>> {
+    let round: Round = request.parse_param(0, "round")?;
+    service.forensic_db.get_quorum_cert_at_round(round)
+}
+
 /// Builds registry of all available RPC methods
 /// To register new RPC method, add it via `register_rpc_method!` macros call
 /// Note that RPC method name will equal to name of function
@@ -627,6 +652,8 @@ pub(crate) fn build_registry() -> RpcRegistry {
         0
     );
     register_rpc_method!(registry, "get_network_status", get_network_status, 0, 0);
+    register_rpc_method!(registry, "test_rpc", test_rpc, 1, 0);
+    register_rpc_method!(registry, "test_forensic", test_forensic, 1, 0);
 
     registry
 }

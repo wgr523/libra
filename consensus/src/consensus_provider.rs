@@ -10,6 +10,7 @@ use crate::{
     state_computer::ExecutionProxy,
     txn_manager::MempoolProxy,
     util::time_service::ClockTimeService,
+    forensic_storage::ForensicStorage,
 };
 use channel::libra_channel;
 use execution_correctness::ExecutionCorrectnessManager;
@@ -32,6 +33,7 @@ pub fn start_consensus(
     consensus_to_mempool_sender: mpsc::Sender<ConsensusRequest>,
     libra_db: Arc<dyn DbReader>,
     reconfig_events: libra_channel::Receiver<(), OnChainConfigPayload>,
+    forensic_db: Arc<dyn ForensicStorage>,
 ) -> Runtime {
     let runtime = runtime::Builder::new()
         .thread_name("consensus")
@@ -39,7 +41,7 @@ pub fn start_consensus(
         .enable_all()
         .build()
         .expect("Failed to create Tokio runtime!");
-    let storage = Arc::new(StorageWriteProxy::new(node_config, libra_db));
+    let storage = Arc::new(StorageWriteProxy::new(node_config, libra_db, forensic_db));
     let txn_manager = Arc::new(MempoolProxy::new(
         consensus_to_mempool_sender,
         node_config.consensus.mempool_poll_count,

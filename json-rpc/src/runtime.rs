@@ -22,6 +22,7 @@ use warp::{
     reject::{self, Reject},
     Filter,
 };
+use consensus::forensic_storage::ForensicStorage;
 
 // Counter labels for runtime metrics
 const LABEL_FAIL: &str = "fail";
@@ -86,6 +87,7 @@ pub fn bootstrap(
     page_size_limit: u16,
     content_len_limit: usize,
     libra_db: Arc<dyn DbReader>,
+    forensic_db: Arc<dyn ForensicStorage>,
     mp_sender: MempoolClientSender,
     role: RoleType,
     chain_id: ChainId,
@@ -100,6 +102,7 @@ pub fn bootstrap(
     let registry = Arc::new(build_registry());
     let service = JsonRpcService::new(
         libra_db,
+        forensic_db,
         mp_sender,
         role,
         chain_id,
@@ -162,6 +165,7 @@ pub fn bootstrap_from_config(
     config: &NodeConfig,
     chain_id: ChainId,
     libra_db: Arc<dyn DbReader>,
+    forensic_db: Arc<dyn ForensicStorage>,
     mp_sender: MempoolClientSender,
 ) -> Runtime {
     bootstrap(
@@ -170,6 +174,7 @@ pub fn bootstrap_from_config(
         config.json_rpc.page_size_limit,
         config.json_rpc.content_length_limit,
         libra_db,
+        forensic_db,
         mp_sender,
         config.base.role,
         chain_id,

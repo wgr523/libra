@@ -2940,6 +2940,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "compiled-stdlib",
+ "consensus",
+ "consensus-types",
  "executor",
  "executor-types",
  "fail",

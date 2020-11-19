@@ -17,6 +17,7 @@ use libra_types::{
 };
 use std::{cmp::max, collections::HashSet, sync::Arc};
 use storage_interface::DbReader;
+use crate::forensic_storage::ForensicStorage;
 
 /// PersistentLivenessStorage is essential for maintaining liveness when a node crashes.  Specifically,
 /// upon a restart, a correct node will recover.  Even if all nodes crash, liveness is
@@ -274,12 +275,13 @@ impl RecoveryData {
 pub struct StorageWriteProxy {
     db: Arc<ConsensusDB>,
     libra_db: Arc<dyn DbReader>,
+    forensic_db: Arc<dyn ForensicStorage>,
 }
 
 impl StorageWriteProxy {
-    pub fn new(config: &NodeConfig, libra_db: Arc<dyn DbReader>) -> Self {
+    pub fn new(config: &NodeConfig, libra_db: Arc<dyn DbReader>, forensic_db: Arc<dyn ForensicStorage>) -> Self {
         let db = Arc::new(ConsensusDB::new(config.storage.dir()));
-        StorageWriteProxy { db, libra_db }
+        StorageWriteProxy { db, libra_db, forensic_db }
     }
 }
 
@@ -289,8 +291,9 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         for block in blocks.iter() {
             trace_code_block!("consensusdb::save_tree", {"block", block.id()}, trace_batch);
         }
+        self.forensic_db.save_quorum_cert(&quorum_certs)?;
         for qc in quorum_certs.iter() {
-            info!("{{\"quorum_cert\":{}}}", serde_json::to_string(&qc).unwrap());
+            info!("{{\"quorum_cert\":{}}}", serde_json::to_string(&qc).unwrap());//TODO this can be deleted
         }
         Ok(self
             .db

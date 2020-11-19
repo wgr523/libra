@@ -32,12 +32,15 @@ use std::{
 };
 use storage_interface::{DbReader, Order, StartupInfo, TreeState};
 use tokio::runtime::Runtime;
+use libra_types::block_info::Round;
+use consensus::forensic_storage::ForensicStorage;
 
 /// Creates JSON RPC server for a Validator node
 /// Should only be used for unit-tests
 pub fn test_bootstrap(
     address: SocketAddr,
     libra_db: Arc<dyn DbReader>,
+    forensic_db: Arc<dyn ForensicStorage>,
     mp_sender: MempoolClientSender,
 ) -> Runtime {
     crate::bootstrap(
@@ -46,6 +49,7 @@ pub fn test_bootstrap(
         DEFAULT_PAGE_SIZE_LIMIT,
         DEFAULT_CONTENT_LENGTH_LIMIT,
         libra_db,
+        forensic_db,
         mp_sender,
         RoleType::Validator,
         ChainId::test(),
@@ -292,5 +296,21 @@ impl DbReader for MockLibraDB {
             Some(t) => *t,
             None => *self.timestamps.last().unwrap(),
         })
+    }
+}
+/// Empty ForensicDB
+pub struct EmptyForensicDB;
+
+impl EmptyForensicDB {
+    pub fn new() -> Self {
+        Self
+    }
+}
+impl ForensicStorage for EmptyForensicDB {
+    fn save_quorum_cert(&self, quorum_certs: &[QuorumCert]) -> Result<()> {
+        Ok(())
+    }
+    fn get_quorum_cert_at_round(&self, round: Round) -> Result<Vec<QuorumCert>> {
+        Ok(Vec::new())
     }
 }

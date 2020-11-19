@@ -40,6 +40,8 @@ use storage_interface::DbReaderWriter;
 use storage_service::start_storage_service_with_db;
 use tokio::runtime::{Builder, Runtime};
 
+use consensus::forensic_storage::ForensicDB;
+
 const AC_SMP_CHANNEL_BUFFER_SIZE: usize = 1_024;
 const INTRA_NODE_CHANNEL_BUFFER_SIZE: usize = 1;
 const MEMPOOL_NETWORK_CHANNEL_BUFFER_SIZE: usize = 1_024;
@@ -288,6 +290,10 @@ pub fn setup_environment(node_config: &NodeConfig, logger: Option<Arc<Logger>>) 
         Arc::clone(&libra_db),
     );
 
+    // start forensic db
+    let forensic_db = ForensicDB::new(&node_config.storage.dir().join(PathBuf::from("forensic")));
+    let forensic_db = Arc::new(forensic_db);
+
     let genesis_waypoint = node_config.base.waypoint.genesis_waypoint();
     // if there's genesis txn and waypoint, commit it if the result matches.
     if let Some(genesis) = get_genesis_txn(&node_config) {
@@ -429,7 +435,7 @@ pub fn setup_environment(node_config: &NodeConfig, logger: Option<Arc<Logger>>) 
     );
     let (mp_client_sender, mp_client_events) = channel(AC_SMP_CHANNEL_BUFFER_SIZE);
 
-    let rpc_runtime = bootstrap_rpc(&node_config, chain_id, libra_db.clone(), mp_client_sender);
+    let rpc_runtime = bootstrap_rpc(&node_config, chain_id, libra_db.clone(), forensic_db.clone(), mp_client_sender);
 
     let mut consensus_runtime = None;
     let (consensus_to_mempool_sender, consensus_requests) = channel(INTRA_NODE_CHANNEL_BUFFER_SIZE);
@@ -469,6 +475,7 @@ pub fn setup_environment(node_config: &NodeConfig, logger: Option<Arc<Logger>>) 
             consensus_to_mempool_sender,
             libra_db,
             consensus_reconfig_events,
+            forensic_db,
         ));
         debug!("Consensus started in {} ms", instant.elapsed().as_millis());
     }

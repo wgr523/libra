@@ -79,7 +79,8 @@ impl ForensicStorage for ForensicDB {
         qc_data: &[QuorumCert],
     ) -> Result<()> {
         if qc_data.is_empty() {
-            return Err(anyhow::anyhow!("qc data is empty!").into());
+            //return Err(anyhow::anyhow!("qc data is empty!").into());
+            return Ok(());
         }
         let mut batch = SchemaBatch::new();
         qc_data

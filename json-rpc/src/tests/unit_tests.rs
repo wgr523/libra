@@ -65,6 +65,7 @@ use vm_validator::{
 };
 
 use serde_json::json;
+use crate::tests::utils::EmptyForensicDB;
 
 // returns MockLibraDB for unit-testing
 fn mock_db() -> MockLibraDB {
@@ -934,7 +935,7 @@ fn test_transaction_submission() {
     let mock_db = mock_db();
     let port = utils::get_available_port();
     let address = format!("0.0.0.0:{}", port);
-    let mut runtime = test_bootstrap(address.parse().unwrap(), Arc::new(mock_db), mp_sender);
+    let mut runtime = test_bootstrap(address.parse().unwrap(), Arc::new(mock_db), Arc::new(EmptyForensicDB::new()), mp_sender);
     let client = JsonRpcAsyncClient::new(
         reqwest::Url::from_str(format!("http://{}:{}/v1", "127.0.0.1", port).as_str())
             .expect("invalid url"),
@@ -1459,6 +1460,7 @@ fn create_db_and_runtime() -> (
     let runtime = test_bootstrap(
         address.parse().unwrap(),
         Arc::new(mock_db.clone()),
+        Arc::new(EmptyForensicDB::new()),
         mp_sender,
     );
     (mock_db, runtime, format!("http://{}", address), mp_events)
