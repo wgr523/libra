@@ -598,17 +598,15 @@ async fn get_network_status(service: JsonRpcService, _request: JsonRpcRequest) -
 }
 
 /// Test rpc, echo the integer
-async fn test_rpc(
-    _service: JsonRpcService,
-    request: JsonRpcRequest,
-) -> Result<u64> {
-    let arg: u64 = request.parse_param(0, "arg")?;
-
-    Ok(arg)
+async fn forensic_get_latest_round(
+    service: JsonRpcService,
+    _request: JsonRpcRequest,
+) -> Result<Round> {
+    service.forensic_db.get_latest_round()
 }
 
 /// Test: read qc at round 1
-async fn test_forensic(
+async fn forensic_get_quorum_cert_at_round(
     service: JsonRpcService,
     request: JsonRpcRequest,
 ) -> Result<Vec<QuorumCert>> {
@@ -652,8 +650,8 @@ pub(crate) fn build_registry() -> RpcRegistry {
         0
     );
     register_rpc_method!(registry, "get_network_status", get_network_status, 0, 0);
-    register_rpc_method!(registry, "test_rpc", test_rpc, 1, 0);
-    register_rpc_method!(registry, "test_forensic", test_forensic, 1, 0);
+    register_rpc_method!(registry, "forensic_get_latest_round", forensic_get_latest_round, 0, 0);
+    register_rpc_method!(registry, "forensic_get_quorum_cert_at_round", forensic_get_quorum_cert_at_round, 1, 0);
 
     registry
 }

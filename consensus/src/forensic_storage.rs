@@ -25,12 +25,15 @@ pub trait ForensicStorage: Send + Sync {
     fn save_quorum_cert(&self, quorum_certs: &[QuorumCert]) -> Result<()>;
     /// Forensic
     fn get_quorum_cert_at_round(&self, round: Round) -> Result<Vec<QuorumCert>>;
+    /// Forensic
+    fn get_latest_round(&self) -> Result<Round>;
 }
 
 /// Forensic
 pub struct ForensicDB {
     db: DB,
-    round_to_qcs: RwLock<HashMap<Round,Vec<HashValue>>>
+    round_to_qcs: RwLock<HashMap<Round,Vec<HashValue>>>,
+    latest_round: RwLock<Round>,
 }
 
 impl ForensicDB {
@@ -63,7 +66,8 @@ impl ForensicDB {
         );
 
         let round_to_qcs = RwLock::new(round_to_qcs);
-        Self { db, round_to_qcs }
+        let latest_round = RwLock::new(0);
+        Self { db, round_to_qcs, latest_round }
     }
 
     /// Get QC
@@ -89,8 +93,15 @@ impl ForensicStorage for ForensicDB {
             .collect::<Result<()>>()?;
         self.db.write_schemas(batch)?;
         let mut round_to_qcs = self.round_to_qcs.write();
-        qc_data.iter().for_each(|qc|
-            round_to_qcs.entry(qc.vote_data().proposed().round()).or_default().push(qc.vote_data().proposed().id())
+        qc_data.iter().for_each(|qc| {
+            let mut latest_round = self.latest_round.write();
+            let r = qc.vote_data().proposed().round();
+            if r > *latest_round {
+                *latest_round = r;
+            }
+            drop(latest_round);
+            round_to_qcs.entry(r).or_default().push(qc.vote_data().proposed().id())
+        }
         );
         Ok(())
     }
@@ -107,6 +118,11 @@ impl ForensicStorage for ForensicDB {
         } else {
             Ok(Vec::new())
         }
+    }
+
+    fn get_latest_round(&self) -> Result<Round> {
+        let latest_round = self.latest_round.read();
+        Ok(*latest_round)
     }
 }
 
@@ -126,5 +142,6 @@ mod test {
             .unwrap();
 
         assert_eq!(db.get_quorum_cert_at_round(0).unwrap().len(), 1);
+        assert_eq!(db.get_latest_round(0).unwrap(), 0);
     }
 }
