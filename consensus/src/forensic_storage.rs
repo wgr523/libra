@@ -142,6 +142,6 @@ mod test {
             .unwrap();
 
         assert_eq!(db.get_quorum_cert_at_round(0).unwrap().len(), 1);
-        assert_eq!(db.get_latest_round(0).unwrap(), 0);
+        assert_eq!(db.get_latest_round().unwrap(), 0);
     }
 }
