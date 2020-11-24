@@ -3,7 +3,7 @@
 
 use crate::{
     network_interface::ConsensusMsg,
-    network_tests::{NetworkPlayground, TwinId},
+    network_tests::{NetworkPlayground, TwinId, DropMsgType},
     test_utils::{consensus_runtime, timed_block_on},
     twins::twins_node::SMRNode,
 };
@@ -308,3 +308,57 @@ fn twins_commit_test() {
         }
     });
 }
+
+#[test]
+/// This test checks that the set_detailed_drop function works
+/// as expected, that is: one type (proposal) is dropped but
+/// the other type (vote) is not dropped
+///
+/// Setup:
+///
+/// 4 honest nodes (n0, n1, n2, n3), and 0 twins.
+/// proposal from n0 in round 1, 2 is dropped
+///
+/// Test:
+///
+/// Run consensus for enough rounds to potentially form a commit.
+/// Check that the commit is in round 3
+///
+/// Run the test:
+/// cargo xtest -p consensus detailed_drop_test -- --nocapture
+fn detailed_drop_test() {
+    let mut runtime = consensus_runtime();
+    let mut playground = NetworkPlayground::new(runtime.handle().clone());
+    let num_nodes = 4;
+    let num_twins = 0;
+    let mut nodes = SMRNode::start_num_nodes_with_twins(
+        num_nodes,
+        num_twins,
+        &mut playground,
+        FixedProposer,
+        None,
+    );
+
+    // 4 honest nodes
+    let n0_twin_id = nodes[0].id;
+    let n1_twin_id = nodes[1].id;
+    let n2_twin_id = nodes[2].id;
+    let n3_twin_id = nodes[3].id;
+
+    let detailed_drop: Vec<(Option<TwinId>,Option<TwinId>,u64,DropMsgType)> = vec![
+        (Some(n0_twin_id), None, 1, DropMsgType::ProposalMsg),
+        (Some(n0_twin_id), None, 2, DropMsgType::ProposalMsg),
+    ];
+    for (src, dst, r, t) in detailed_drop {
+        assert!(playground.set_detailed_drop(src, dst, r, t));
+    }
+    runtime.spawn(playground.start());
+
+    timed_block_on(&mut runtime, async {
+        // Check that the commit round is 3
+        let node0_commit = nodes[0].commit_cb_receiver.next().await;
+        assert!(node0_commit.is_some());
+        assert_eq!(node0_commit.unwrap().ledger_info().round(),3);
+    });
+}
+

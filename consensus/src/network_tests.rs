@@ -848,7 +848,8 @@ mod tests {
 
         // Create per round partitions
         let detailed_drop: Vec<(Option<TwinId>,Option<TwinId>,u64,DropMsgType)> = vec![
-            (None, Some(nodes[0]), 1, DropMsgType::VoteMsg)
+            (Some(nodes[0]), None, 1, DropMsgType::ProposalMsg),
+            (None, Some(nodes[0]), 2, DropMsgType::VoteMsg)
         ];
         for (src, dst, r, t) in detailed_drop {
             assert!(playground.set_detailed_drop(src, dst, r, t));
@@ -862,7 +863,7 @@ mod tests {
         let proposal_msg = ConsensusMsg::ProposalMsg(Box::new(proposal_msg));
         let vote_msg = VoteMsg::new(
             Vote::new(
-                VoteData::new(BlockInfo::random(1), BlockInfo::random(0)),
+                VoteData::new(BlockInfo::random(2), BlockInfo::random(1)),
                 signers[0].author(),
                 placeholder_ledger_info(),
                 &signers[0],
@@ -872,7 +873,7 @@ mod tests {
         let vote_msg = ConsensusMsg::VoteMsg(Box::new(vote_msg));
 
         // Round 1 checks (proposal (from 0) is NOT dropped, vote (to 0) is dropped)
-        assert_eq!(false,playground.is_message_dropped(&nodes[0], &nodes[1], proposal_msg.clone()));
+        assert!(playground.is_message_dropped(&nodes[0], &nodes[1], proposal_msg.clone()));
         assert_eq!(false,playground.is_message_dropped(&nodes[0], &nodes[1], vote_msg.clone()));
         assert!(playground.is_message_dropped(&nodes[1], &nodes[0], vote_msg.clone()));
         assert_eq!(false,playground.is_message_dropped(&nodes[0], &nodes[1], vote_msg.clone()));
