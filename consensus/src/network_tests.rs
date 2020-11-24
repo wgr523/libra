@@ -37,6 +37,7 @@ use std::{
     time::Duration,
 };
 use tokio::runtime::Handle;
+use libra_logger::warn;
 
 /// `TwinId` is used by the NetworkPlayground to uniquely identify
 /// nodes, even if they have the same `AccountAddress` (e.g. for Twins)
@@ -75,6 +76,8 @@ pub struct NetworkPlayground {
     drop_config: Arc<RwLock<DropConfig>>,
     /// Allow test code to drop direct-send messages between peers per round.
     drop_config_round: DropConfigRound,
+    /// Allow test code to drop messages in more detailed setting.
+    drop_config_detailed: DropConfigDetailed,
     /// An executor for spawning node outbound network event handlers
     executor: Handle,
     /// Maps authors to twins IDs
@@ -92,6 +95,7 @@ impl NetworkPlayground {
             outbound_msgs_rx,
             drop_config: Arc::new(RwLock::new(DropConfig::default())),
             drop_config_round: DropConfigRound::default(),
+            drop_config_detailed: DropConfigDetailed::default(),
             executor,
             author_to_twin_ids: Arc::new(RwLock::new(AuthorToTwinIds::default())),
         }
@@ -322,6 +326,7 @@ impl NetworkPlayground {
 
     fn is_message_dropped(&self, src: &TwinId, dst: &TwinId, msg: ConsensusMsg) -> bool {
         self.drop_config.read().is_message_dropped(src, dst)
+            || self.drop_config_detailed.is_message_dropped(src, dst, &msg)
             || Self::get_message_round(msg).map_or(false, |r| {
                 self.drop_config_round.is_message_dropped(src, dst, r)
             })
@@ -361,6 +366,17 @@ impl NetworkPlayground {
         ret
     }
 
+    /// Creates the detailed network drop config: src, dst could be None which means any src/dst.
+    pub fn set_detailed_drop(
+        &mut self,
+        src: Option<TwinId>,
+        dst: Option<TwinId>,
+        round: u64,
+        msg_type: DropMsgType,
+    ) -> bool {
+        self.drop_config_detailed.drop_message(src, dst, round, msg_type)
+    }
+
     pub async fn start(mut self) {
         // Take the next queued message
         while let Some((src_twin_id, net_req)) = self.outbound_msgs_rx.next().await {
@@ -387,6 +403,8 @@ impl NetworkPlayground {
                 if !self.is_message_dropped(&src_twin_id, &dst_twin_id, consensus_msg) {
                     self.deliver_message(src_twin_id, *dst_twin_id, msg_notif)
                         .await;
+                } else {
+                    warn!("Drop message src: {}, dst: {}, msg: {:?}", src_twin_id.id, dst_twin_id.id, msg);
                 }
             }
         }
@@ -461,6 +479,50 @@ impl DropConfigRound {
     ) -> bool {
         let config = self.0.entry(round).or_insert_with(DropConfig::default);
         config.split_network(partition_first, partition_second)
+    }
+}
+
+/// Table of detail message dropping rules
+#[derive(Default)]
+struct DropConfigDetailed(HashMap<u64, HashMap<(Option<TwinId>, Option<TwinId>), DropMsgType>>);
+
+pub enum DropMsgType {
+    ProposalMsg,
+    VoteMsg,
+}
+impl DropConfigDetailed {
+    fn match_msg_type(t: &DropMsgType, msg: &ConsensusMsg) -> bool {
+        match t {
+            DropMsgType::ProposalMsg => matches!(msg, ConsensusMsg::ProposalMsg(_)),
+            DropMsgType::VoteMsg => matches!(msg, ConsensusMsg::VoteMsg(_)),
+        }
+    }
+
+    /// Check if the message match 'src' / 'dst' and consensus msg type and the round
+    fn is_message_dropped(&self, src: &TwinId, dst: &TwinId, msg: &ConsensusMsg) -> bool {
+        NetworkPlayground::get_message_round(msg.clone()).map_or(false, |r|
+            self.0
+                .get(&r)
+                .map_or(false, |s|
+                    s.get(&(None,None)).map_or(false,|t|
+                        Self::match_msg_type(t, msg)) ||
+                        s.get(&(Some(src.clone()),None)).map_or(false,|t|
+                            Self::match_msg_type(t, msg)) ||
+                        s.get(&(None,Some(dst.clone()))).map_or(false,|t|
+                            Self::match_msg_type(t, msg))
+                )
+        )
+    }
+
+    /// Set the drop config: src, dst could be None which means any src/dst.
+    pub fn drop_message(
+        &mut self,
+        src: Option<TwinId>,
+        dst: Option<TwinId>,
+        round: u64,
+        msg_type: DropMsgType,
+    ) -> bool {
+        self.0.entry(round).or_insert_with(HashMap::default).insert((src,dst), msg_type).is_none()
     }
 }
 
@@ -766,5 +828,53 @@ mod tests {
 
         let mut runtime = consensus_runtime();
         timed_block_on(&mut runtime, future::join(f_network_task, f_check));
+    }
+
+    #[test]
+    fn test_detailed_drop() {
+        let runtime = consensus_runtime();
+        let mut playground = NetworkPlayground::new(runtime.handle().clone());
+
+        let num_nodes = 5;
+        let (signers, _validator_verifier) = random_validator_verifier(num_nodes, None, false);
+
+        let mut nodes = Vec::new();
+        for (i, signer) in signers.iter().enumerate() {
+            nodes.push(TwinId {
+                id: i,
+                author: signer.author(),
+            });
+        }
+
+        // Create per round partitions
+        let detailed_drop: Vec<(Option<TwinId>,Option<TwinId>,u64,DropMsgType)> = vec![
+            (None, Some(nodes[0]), 1, DropMsgType::VoteMsg)
+        ];
+        for (src, dst, r, t) in detailed_drop {
+            assert!(playground.set_detailed_drop(src, dst, r, t));
+        }
+
+        let previous_qc = certificate_for_genesis();
+        let proposal_msg = ProposalMsg::new(
+            Block::new_proposal(vec![], 1, 1, previous_qc.clone(), &signers[0]),
+            SyncInfo::new(previous_qc.clone(), previous_qc, None),
+        );
+        let proposal_msg = ConsensusMsg::ProposalMsg(Box::new(proposal_msg));
+        let vote_msg = VoteMsg::new(
+            Vote::new(
+                VoteData::new(BlockInfo::random(1), BlockInfo::random(0)),
+                signers[0].author(),
+                placeholder_ledger_info(),
+                &signers[0],
+            ),
+            test_utils::placeholder_sync_info(),
+        );
+        let vote_msg = ConsensusMsg::VoteMsg(Box::new(vote_msg));
+
+        // Round 1 checks (proposal (from 0) is NOT dropped, vote (to 0) is dropped)
+        assert_eq!(false,playground.is_message_dropped(&nodes[0], &nodes[1], proposal_msg.clone()));
+        assert_eq!(false,playground.is_message_dropped(&nodes[0], &nodes[1], vote_msg.clone()));
+        assert!(playground.is_message_dropped(&nodes[1], &nodes[0], vote_msg.clone()));
+        assert_eq!(false,playground.is_message_dropped(&nodes[0], &nodes[1], vote_msg.clone()));
     }
 }

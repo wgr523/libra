@@ -204,7 +204,7 @@ impl SMRNode {
             config.consensus.proposer_type = proposer_type.clone();
             config.consensus.safety_rules.verify_vote_proposal_signature = false;
             // Disable timeout in twins test to avoid flakiness
-            config.consensus.round_initial_timeout_ms = 2_000_000;
+            config.consensus.round_initial_timeout_ms = 1_000;
 
             let author = author_from_config(&config);
 
