@@ -197,10 +197,9 @@ fn twins_proposer_test() {
     // Will default to the first node, if no leader specified for given round
     let mut round_proposers: HashMap<Round, usize> = HashMap::new();
     // Leaders are n0 (and implicitly twin0) for round 1..10
-    for i in 1..10 {
+    for i in 1..5 {
         round_proposers.insert(i, 0);
     }
-
     let mut nodes = SMRNode::start_num_nodes_with_twins(
         num_nodes,
         num_twins,
@@ -224,7 +223,7 @@ fn twins_proposer_test() {
     // Create per round partitions
     let mut round_partitions: HashMap<u64, Vec<Vec<TwinId>>> = HashMap::new();
     // Round 1 to 10 partitions: [node0, node1, node2], [node3, twin0, twin1]
-    for i in 1..10 {
+    for i in 1..5 {
         round_partitions.insert(
             i,
             vec![
@@ -246,6 +245,7 @@ fn twins_proposer_test() {
                 let twin0_commit_id = twin0_commit_inner.ledger_info().commit_info().id();
                 // Proposal from both node0 and twin_node0 are going to
                 // get committed in their respective partitions
+                println!("{}-{}", node0_commit_id, twin0_commit_id);
                 assert_ne!(node0_commit_id, twin0_commit_id);
             }
             _ => panic!("[TwinsTest] Test failed due to no commit(s)"),
@@ -359,6 +359,92 @@ fn detailed_drop_test() {
         let node0_commit = nodes[0].commit_cb_receiver.next().await;
         assert!(node0_commit.is_some());
         assert_eq!(node0_commit.unwrap().ledger_info().round(),3);
+    });
+}
+
+
+#[test]
+/// This test checks that when a node becomes a proposer in view e, its
+/// twin becomes a proposer in view e'.
+///
+/// Setup:
+///
+/// 4 honest nodes (n0, n1, n2, n3), and 2 twins (twin0, twin1)
+/// Create 2 partitions, p1=[n0, n1, n2], p2=[n3, twin0, twin1]
+/// Let n0 (and implicitly twin0) be proposers
+///
+/// Test:
+///
+/// Extract enough votes so nodes in both partitions form commits.
+/// The commits should be on two different blocks
+///
+/// Run the test:
+/// cargo xtest -p consensus twins_across_view_test -- --nocapture
+fn twins_across_view_test() {
+    let mut runtime = consensus_runtime();
+    let mut playground = NetworkPlayground::new(runtime.handle().clone());
+    let num_nodes = 4;
+    let num_twins = 2;
+
+    // Specify round leaders
+    // Will default to the first node, if no leader specified for given round
+    let mut round_proposers: HashMap<Round, usize> = HashMap::new();
+    // Leaders are n0 (and implicitly twin0) for round 1..10
+    for i in 1..10 {
+        round_proposers.insert(i, 0);
+    }
+
+    let mut nodes = SMRNode::start_num_nodes_with_twins(
+        num_nodes,
+        num_twins,
+        &mut playground,
+        RoundProposer(HashMap::new()),
+        Some(round_proposers),
+    );
+
+    // 4 honest nodes
+    let n0_twin_id = nodes[0].id;
+    // twin of n0 has same author as node_authors[0]
+    let twin0_twin_id = nodes[4].id;
+    assert_eq!(n0_twin_id.author, twin0_twin_id.author);
+    let n1_twin_id = nodes[1].id;
+    // twin of n1 has same author as node_authors[1]
+    let twin1_twin_id = nodes[5].id;
+    assert_eq!(n1_twin_id.author, twin1_twin_id.author);
+    let n2_twin_id = nodes[2].id;
+    let n3_twin_id = nodes[3].id;
+
+    let detailed_drop: Vec<(Option<TwinId>,Option<TwinId>,u64,DropMsgType)> = vec![
+        (Some(twin0_twin_id), None, 1, DropMsgType::ProposalMsg),
+    ];
+
+    for (src, dst, r, t) in detailed_drop {
+        assert!(playground.set_detailed_drop(src, dst, r, t));
+    }
+
+    // Create partition
+    assert!(playground.split_network(vec![n0_twin_id, n1_twin_id, n2_twin_id], vec![n3_twin_id, twin0_twin_id, twin1_twin_id]));
+
+    runtime.spawn(playground.start());
+
+    timed_block_on(&mut runtime, async {
+        let node2_commit = nodes[2].commit_cb_receiver.next().await;
+        let node3_commit = nodes[3].commit_cb_receiver.next().await;
+        match (node2_commit, node3_commit) {
+            (Some(node2_commit_inner), Some(node3_commit_inner)) => {
+                let node2_commit_id = node2_commit_inner.ledger_info().commit_info().id();
+                let node3_commit_id = node3_commit_inner.ledger_info().commit_info().id();
+                let node2_commit_round = node2_commit_inner.ledger_info().commit_info().round();
+                let node3_commit_round = node3_commit_inner.ledger_info().commit_info().round();
+                // Proposal from both node0 and twin_node0 are going to
+                // get committed in their respective partitions
+                // Two honest nodes 2 and 3 commit different blocks in different rounds
+                assert_ne!(node2_commit_id, node3_commit_id);
+                assert_ne!(node2_commit_round, node3_commit_round);
+
+            }
+            _ => panic!("[TwinsTest] Test failed due to no commit(s)"),
+        }
     });
 }
 
