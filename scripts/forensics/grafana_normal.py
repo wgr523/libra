@@ -80,7 +80,7 @@ def get_qcs_from_rpc(url = "http://127.0.0.1:8080"):
         response = requests.post(url, data=json.dumps(payload), headers=headers).json()
         if len(response["result"])==0:
             break
-        qc = response["result"][0]
+        qc = response["result"][0]["qc"]
         # check round number
         if qc["vote_data"]["proposed"]["round"] == r:
             insert((r, qc["vote_data"]["proposed"]["id"][:6]))
@@ -104,7 +104,7 @@ def get_qcs_from_rpc_swarm(urls = ["http://127.0.0.1:8080"]):
             response = requests.post(url, data=json.dumps(payload), headers=headers).json()
             if len(response["result"])==0:
                 break
-            qc = response["result"][0]
+            qc = response["result"][0]["qc"]
             # check round number
             if qc["vote_data"]["proposed"]["round"] == r:
                 hashes.append(qc["vote_data"]["proposed"]["id"][:6])
