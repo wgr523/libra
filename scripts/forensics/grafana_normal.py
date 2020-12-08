@@ -21,34 +21,45 @@ def get_urls():
             urls.append("http://"+yaml.safe_load(stream)['json_rpc']['address'])
     return urls
 
-def insert(params):
-    if (len(params) == 2):
-        sql = "INSERT INTO qcs (round, hash) VALUES (%s, %s)"
-    else:
-        sql = "INSERT INTO qcs (round, node0, node1, node2, node3) VALUES (%s, %s, %s, %s, %s)"
-
+def insert(table_name, params):
+    sql = "INSERT INTO {} (round, B1, B2, B3) VALUES (%s, %s, %s, %s)".format(table_name)
     val = params
     mycursor.execute(sql, val)
-
     mydb.commit()
 
+def insert_qcs(params):
+    sql = "INSERT INTO qcs (round, node0, node1, node2, node3) VALUES (%s, %s, %s, %s, %s)"
+    val = params
+    mycursor.execute(sql, val)
+    mydb.commit()
 
-def delete(x=3):
+def delete(table_name, x=3):
+    sql = "DELETE FROM {} WHERE round > -1 limit %s".format(table_name)
+    val = (x,)
+    mycursor.execute(sql, val)
+    mydb.commit()
+
+def delete_qcs(x=3):
     sql = "DELETE FROM qcs limit %s"
     val = (x,)
     mycursor.execute(sql, val)
-
     mydb.commit()
 
-def clear(n=1):
-    sql_drop = "DROP TABLE IF EXISTS qcs"
-    if n == 1:
-        sql_create = "CREATE TABLE qcs (round INTEGER, hash VARCHAR(10))"
-    elif n == 4:
-        sql_create = "CREATE TABLE qcs (round INTEGER, node0 VARCHAR(10), node1 VARCHAR(10), node2 VARCHAR(10), node3 VARCHAR(10))"
+def clear(table_name="node0"):
+    sql_drop = "DROP TABLE IF EXISTS {}".format(table_name)
+    sql_create = "CREATE TABLE {} (round INTEGER, B1 VARCHAR(10), B2 VARCHAR(10), B3 VARCHAR(10))".format(table_name)
+    sql_insert = "INSERT INTO {} (round, B1, B2, B3) values (%s, %s, %s, %s)".format(table_name)
+    val = (-1, "1", "2","3")
     mycursor.execute(sql_drop)
     mycursor.execute(sql_create)
+    mycursor.execute(sql_insert, val)
+    mydb.commit()
 
+def clear_qcs():
+    sql_drop = "DROP TABLE IF EXISTS qcs"
+    sql_create = "CREATE TABLE qcs (round INTEGER, node0 VARCHAR(10), node1 VARCHAR(10), node2 VARCHAR(10), node3 VARCHAR(10))"
+    mycursor.execute(sql_drop)
+    mycursor.execute(sql_create)
     mydb.commit()
 
 
@@ -60,34 +71,10 @@ get_latest_round_payload = {
     "jsonrpc": "2.0",
     "id": 0,
 }
+nodes = ["node0", "node1", "node2", "node3"]
 
-def get_qcs_from_rpc(url = "http://127.0.0.1:8080"):
 
-    global latest_round
-
-    response = requests.post(url, data=json.dumps(get_latest_round_payload), headers=headers).json()
-
-    new_latest_round = response["result"]
-
-    ret = []
-    for r in range(max(latest_round, new_latest_round-3)+1, new_latest_round+1):
-        payload = {
-                "method": "forensic_get_quorum_cert_at_round",
-                "params": [r],
-                "jsonrpc": "2.0",
-                "id": 0,
-                }
-        response = requests.post(url, data=json.dumps(payload), headers=headers).json()
-        if len(response["result"])==0:
-            break
-        qc = response["result"][0]
-        # check round number
-        if qc["vote_data"]["proposed"]["round"] == r:
-            insert((r, qc["vote_data"]["proposed"]["id"][:6]))
-            ret.append({"round":r, "hash": qc["vote_data"]["proposed"]["id"][:6]})
-    latest_round = new_latest_round
-    return ret
-def get_qcs_from_rpc_swarm(urls = ["http://127.0.0.1:8080"]):
+def get_qcs_from_rpc_swarm(urls):
     global latest_round
     ret = []
     response = requests.post(urls[0], data=json.dumps(get_latest_round_payload), headers=headers).json()
@@ -108,16 +95,20 @@ def get_qcs_from_rpc_swarm(urls = ["http://127.0.0.1:8080"]):
             # check round number
             if qc["vote_data"]["proposed"]["round"] == r:
                 hashes.append(qc["vote_data"]["proposed"]["id"][:6])
-
-        insert((r, hashes[0], hashes[1], hashes[2], hashes[3]))
+        insert_qcs((r, hashes[0], hashes[1], hashes[2], hashes[3]))
         ret.append({"round":r, "node0": hashes[0], "node1": hashes[1], "node2": hashes[2], "node3": hashes[3]})
     latest_round = new_latest_round
+    for node in nodes:
+        insert(node, (r-2, ret[0][node], ret[1][node], ret[2][node]))
     return ret
 def update():
     threading.Timer(5.0, update).start()
-    delete(3)
+    delete_qcs(3)
+    for node in nodes:
+        delete(node, 1)
     get_qcs_from_rpc_swarm(get_urls())
 
-clear(4)
-#get_qcs_from_rpc()
+clear_qcs()
+for node in nodes:
+    clear(node)
 update() 
