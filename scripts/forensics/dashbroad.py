@@ -25,7 +25,7 @@ def get_qcs_from_rpc(url = "http://127.0.0.1:8080"):
     new_latest_round = response["result"]
 
     ret = []
-    for r in range(max(latest_round, new_latest_round-3)+1, new_latest_round+1):
+    for r in range(max(latest_round, new_latest_round-20)+1, new_latest_round+1):
         payload = {
                 "method": "forensic_get_quorum_cert_at_round",
                 "params": [r],
@@ -35,10 +35,10 @@ def get_qcs_from_rpc(url = "http://127.0.0.1:8080"):
         response = requests.post(url, data=json.dumps(payload), headers=headers).json()
         if len(response["result"])==0:
             break
-        qc = response["result"][0]
+        qc = response["result"][0]["qc"]
         # check round number
         if qc["vote_data"]["proposed"]["round"] == r:
-            ret.append({"round":r, "hash": qc["vote_data"]["proposed"]["id"][:6]})
+            ret.append({"round":r, "hash": qc["vote_data"]["proposed"]["id"][:6]+" is_nil="+str(response["result"][0]["is_nil"])})
 
     latest_round = new_latest_round
     return ret
@@ -53,7 +53,7 @@ app.layout = html.Div([
         ),
     dcc.Interval(
             id='interval-component',
-            interval=2*1000, # in milliseconds
+            interval=5*1000, # in milliseconds
             n_intervals=0
         )
     ])

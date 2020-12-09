@@ -38,9 +38,8 @@ use std::{
     sync::Arc,
 };
 use storage_interface::{DbReader, Order};
-use consensus::forensic_storage::ForensicStorage;
+use consensus::forensic_storage::{ForensicQuorumCert, ForensicStorage};
 use libra_types::block_info::Round;
-use consensus_types::quorum_cert::QuorumCert;
 
 #[derive(Clone)]
 pub(crate) struct JsonRpcService {
@@ -609,7 +608,7 @@ async fn forensic_get_latest_round(
 async fn forensic_get_quorum_cert_at_round(
     service: JsonRpcService,
     request: JsonRpcRequest,
-) -> Result<Vec<QuorumCert>> {
+) -> Result<Vec<ForensicQuorumCert>> {
     let round: Round = request.parse_param(0, "round")?;
     service.forensic_db.get_quorum_cert_at_round(round)
 }
