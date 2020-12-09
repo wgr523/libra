@@ -4,6 +4,7 @@ import requests
 import json
 import mysql.connector
 import threading
+import os
 
 mydb = mysql.connector.connect(
   host="localhost",
@@ -13,6 +14,13 @@ mydb = mysql.connector.connect(
 )
 
 mycursor = mydb.cursor()
+
+log_files = []
+def get_log_files():
+    global log_files
+    log_files = []
+    for i in range(4):
+        log_files.append("/tmp/libra_swarm/logs/{}.log".format(i))
 
 def get_urls():
     urls = []
@@ -73,6 +81,32 @@ get_latest_round_payload = {
 }
 nodes = ["node0", "node1", "node2", "node3"]
 
+def clear_text():
+    sql_drop = "DROP TABLE IF EXISTS text"
+    sql_create = "CREATE TABLE text (id VARCHAR(20) NOT NULL, is_culprit BOOL NOT NULL, content VARCHAR(1024), PRIMARY KEY (id))"
+    # init the entry with default value
+    sql_insert = "INSERT INTO text (id, is_culprit) values ('culprit', 0)"
+    mycursor.execute(sql_drop)
+    mycursor.execute(sql_create)
+    mycursor.execute(sql_insert)
+    global nodes
+    for node in nodes:
+        sql_insert = "INSERT INTO text (id, is_culprit) values ('{}', 0)".format(node)
+        mycursor.execute(sql_insert)
+    mydb.commit()
+
+def get_logs():
+    global nodes
+    global log_files
+    bufsize = 1000
+    for i, node in enumerate(nodes):
+        fsize = os.stat(log_files[i]).st_size
+        with open(log_files[i]) as stream:
+            stream.seek(max(0,fsize-bufsize))
+            the_log = stream.read()
+            sql_update = "UPDATE text SET content='{}' WHERE id='{}'".format(the_log, node)
+            mycursor.execute(sql_update)
+    mydb.commit()
 
 def get_qcs_from_rpc_swarm(urls):
     global latest_round
@@ -107,7 +141,10 @@ def update():
     for node in nodes:
         delete(node, 1)
     get_qcs_from_rpc_swarm(get_urls())
+    get_logs()
 
+get_log_files()
+clear_text()
 clear_qcs()
 for node in nodes:
     clear(node)
