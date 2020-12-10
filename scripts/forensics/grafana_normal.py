@@ -5,6 +5,7 @@ import json
 import mysql.connector
 import threading
 import os
+import time
 
 mydb = mysql.connector.connect(
   host="localhost",
@@ -22,12 +23,13 @@ def get_log_files():
     for i in range(4):
         log_files.append("/tmp/libra_swarm/logs/{}.log".format(i))
 
+urls = []
 def get_urls():
+    global urls
     urls = []
     for i in range(4):
         with open("/tmp/libra_swarm/{}/node.yaml".format(i), 'r') as stream:
             urls.append("http://"+yaml.safe_load(stream)['json_rpc']['address'])
-    return urls
 
 def insert(table_name, params):
     sql = "INSERT INTO {} (round, B1, B2, B3) VALUES (%s, %s, %s, %s)".format(table_name)
@@ -125,27 +127,35 @@ def get_qcs_from_rpc_swarm(urls):
             response = requests.post(url, data=json.dumps(payload), headers=headers).json()
             if len(response["result"])==0:
                 break
+            is_nil = response["result"][0]["is_nil"]
             qc = response["result"][0]["qc"]
             # check round number
             if qc["vote_data"]["proposed"]["round"] == r:
-                hashes.append(qc["vote_data"]["proposed"]["id"][:6])
+                if is_nil:
+                    hashes.append("NIL BLOCK")
+                else:
+                    hashes.append("0x"+qc["vote_data"]["proposed"]["id"][:6])
         insert_qcs((r, hashes[0], hashes[1], hashes[2], hashes[3]))
         ret.append({"round":r, "node0": hashes[0], "node1": hashes[1], "node2": hashes[2], "node3": hashes[3]})
     latest_round = new_latest_round
     for node in nodes:
         insert(node, (r-2, ret[0][node], ret[1][node], ret[2][node]))
     return ret
+
 def update():
-    threading.Timer(5.0, update).start()
     delete_qcs(3)
     for node in nodes:
         delete(node, 1)
-    get_qcs_from_rpc_swarm(get_urls())
+    get_qcs_from_rpc_swarm(urls)
     get_logs()
 
-get_log_files()
-clear_text()
-clear_qcs()
-for node in nodes:
-    clear(node)
-update() 
+if __name__ == "__main__":
+    get_log_files()
+    get_urls()
+    clear_text()
+    clear_qcs()
+    for node in nodes:
+        clear(node)
+    while True:
+        update()
+        time.sleep(1)
