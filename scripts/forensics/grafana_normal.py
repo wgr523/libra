@@ -100,7 +100,7 @@ def clear_text():
 def get_logs():
     global nodes
     global log_files
-    bufsize = 1000
+    bufsize = 512
     for i, node in enumerate(nodes):
         fsize = os.stat(log_files[i]).st_size
         with open(log_files[i]) as stream:
@@ -126,7 +126,8 @@ def get_qcs_from_rpc_swarm(urls):
         for url in urls:
             response = requests.post(url, data=json.dumps(payload), headers=headers).json()
             if len(response["result"])==0:
-                break
+                hashes.append("err")
+                continue
             is_nil = response["result"][0]["is_nil"]
             qc = response["result"][0]["qc"]
             # check round number
@@ -134,12 +135,15 @@ def get_qcs_from_rpc_swarm(urls):
                 if is_nil:
                     hashes.append("NIL BLOCK")
                 else:
-                    hashes.append("0x"+qc["vote_data"]["proposed"]["id"][:6])
+                    hashes.append("'"+qc["vote_data"]["proposed"]["id"][:6]+"'")
+            else:
+                hashes.append("err")
         insert_qcs((r, hashes[0], hashes[1], hashes[2], hashes[3]))
         ret.append({"round":r, "node0": hashes[0], "node1": hashes[1], "node2": hashes[2], "node3": hashes[3]})
     latest_round = new_latest_round
-    for node in nodes:
-        insert(node, (r-2, ret[0][node], ret[1][node], ret[2][node]))
+    if r>2 and len(ret)>2:
+        for node in nodes:
+            insert(node, (r-2, ret[0][node], ret[1][node], ret[2][node]))
     return ret
 
 def update():
@@ -158,4 +162,4 @@ if __name__ == "__main__":
         clear(node)
     while True:
         update()
-        time.sleep(1)
+        time.sleep(5)
