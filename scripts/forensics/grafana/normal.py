@@ -50,7 +50,7 @@ def get_qcs_from_rpc(urls):
 	latest_round = new_latest_round
 	if r>2 and len(ret)>2:
 		for node in nodes:
-			insert_node(node, (r-2, "{}:<br>{}".format(r-2, ret[0][node]), "{}:<br>{}".format(r-1,ret[1][node]), "{}:<br>{}".format(r,ret[2][node])))
+			insert_node(node, (ret[0]["round"], "{}:<br>{}".format(r-2, ret[0][node]), "{}:<br>{}".format(ret[1]["round"],ret[1][node]), "{}:<br>{}".format(ret[2]["round"],ret[2][node])))
 	return ret
 def get_logs():
 	global nodes
@@ -77,12 +77,14 @@ def update(n):
 if __name__ == "__main__":
 	log_files = get_log_files()
 	urls = get_urls()
+	clear_images(1)
 	clear_text(nodes)
 	clear_qcs()
 	clear_conflict()
 	clear_culprits()
 	for node in nodes:
 		clear_node(node)
+	clear_node("twin0")
 	cnt = 0
 	while True:
 		update(cnt)

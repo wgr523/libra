@@ -9,7 +9,7 @@ import datetime
 import json
 
 
-nodes = ["node0", "node1", "node2", "node3"]
+nodes = ["node0", "node1", "node2", "node3", "twin0", "twin1"]
 detected = -1
 culprits = []
 qcs = defaultdict(dict)
@@ -61,7 +61,7 @@ def get_qcs_from_log(n):
             if (2,r) in qcr and (3,r) in qcr and qcr[(2,r)] != qcr[(3,r)] and detected == -1:
                 detected = r
                 culprits = [x[:5] for x in check_within_view(r)]
-                insert_culprits((r, "{}".format(culprits)))
+                insert_culprits((r, "{}".format(culprits), r+2, r+2, r))
 
             if (i,r) in qcr:
                 rnd_lst.append("'"+qcr[(i,r)]+"'")
@@ -77,7 +77,7 @@ def get_qcs_from_log(n):
 
     df = pd.DataFrame(np.array(df_lst), columns=['round', 'node0', 'node1', 'node2', 'node3', 'twin0', 'twin1']).to_dict('records')
     for node in nodes:
-        insert_node(node, (r-2, "{}:<br>{}".format(r-2, df[0][node]), "{}:<br>{}".format(r-1,df[1][node]), "{}:<br>{}".format(r,df[2][node])))    
+        insert_node(node, (df[0]['round'], "{}:<br>{}".format(df[0]['round'], df[0][node]), "{}:<br>{}".format(df[1]['round'],df[1][node]), "{}:<br>{}".format(df[2]['round'],df[2][node])))    
     return df
 
 
@@ -93,6 +93,7 @@ def update(n):
 if __name__ == "__main__":
     #log_files = get_log_files()
     #clear_text(nodes)
+    clear_images(2)
     clear_qcs_twins()
     clear_conflict()
     clear_culprits()

@@ -11,7 +11,7 @@ mycursor = mydb.cursor()
 
 def clear_node(table_name="node0"):
     sql_drop = "DROP TABLE IF EXISTS {}".format(table_name)
-    sql_create = "CREATE TABLE {} (round INTEGER, B1 VARCHAR(20), B2 VARCHAR(20), B3 VARCHAR(20))".format(table_name)
+    sql_create = "CREATE TABLE {} (round INTEGER, B1 VARCHAR(100), B2 VARCHAR(100), B3 VARCHAR(100))".format(table_name)
     sql_insert = "INSERT INTO {} (round, B1, B2, B3) values (%s, %s, %s, %s)".format(table_name)
     val = (-1, "1", "2","3")
     mycursor.execute(sql_drop)
@@ -19,23 +19,33 @@ def clear_node(table_name="node0"):
     mycursor.execute(sql_insert, val)
     mydb.commit()
 
+def clear_images(img_name=1):
+    sql_drop = "DROP TABLE IF EXISTS images"
+    sql_create = "CREATE TABLE images (normal INTEGER)"
+    sql_insert = "INSERT INTO images (normal) values (%s)"
+    val = (img_name,)
+    mycursor.execute(sql_drop)
+    mycursor.execute(sql_create)
+    mycursor.execute(sql_insert, val)
+    mydb.commit()
+
 def clear_qcs():
     sql_drop = "DROP TABLE IF EXISTS qcs"
-    sql_create = "CREATE TABLE qcs (round INTEGER, node0 VARCHAR(20), node1 VARCHAR(20), node2 VARCHAR(20), node3 VARCHAR(20))"
+    sql_create = "CREATE TABLE qcs (round INTEGER, node0 VARCHAR(100), node1 VARCHAR(100), node2 VARCHAR(100), node3 VARCHAR(100))"
     mycursor.execute(sql_drop)
     mycursor.execute(sql_create)
     mydb.commit()
 
 def clear_qcs_twins():
     sql_drop = "DROP TABLE IF EXISTS qcs"
-    sql_create = "CREATE TABLE qcs (round INTEGER, node0 VARCHAR(20), node1 VARCHAR(20), node2 VARCHAR(20), node3 VARCHAR(20), twin0 VARCHAR(20), twin1 VARCHAR(20))"
+    sql_create = "CREATE TABLE qcs (round INTEGER, node0 VARCHAR(100), node1 VARCHAR(100), node2 VARCHAR(100), node3 VARCHAR(100), twin0 VARCHAR(100), twin1 VARCHAR(100))"
     mycursor.execute(sql_drop)
     mycursor.execute(sql_create)
     mydb.commit()
 
 def clear_culprits():
     sql_drop = "DROP TABLE IF EXISTS culprits"
-    sql_create = "CREATE TABLE culprits (round INTEGER, culprits VARCHAR(50))"
+    sql_create = "CREATE TABLE culprits (round INTEGER, culprits VARCHAR(50), commit1 INTEGER, commit2 INTEGER, prepare INTEGER)"
     mycursor.execute(sql_drop)
     mycursor.execute(sql_create)
     mydb.commit()
@@ -49,7 +59,7 @@ def clear_conflict():
 
 def clear_text(nodes):
     sql_drop = "DROP TABLE IF EXISTS text"
-    sql_create = "CREATE TABLE text (id VARCHAR(20) NOT NULL, is_culprit BOOL NOT NULL, content VARCHAR(1024), PRIMARY KEY (id))"
+    sql_create = "CREATE TABLE text (id VARCHAR(100) NOT NULL, is_culprit BOOL NOT NULL, content VARCHAR(1024), PRIMARY KEY (id))"
     # init the entry with default value
     sql_insert = "INSERT INTO text (id, is_culprit) values ('culprit', 0)"
     mycursor.execute(sql_drop)
@@ -73,7 +83,7 @@ def insert_qcs(params):
     mydb.commit()
 
 def insert_culprits(params):
-    sql = "INSERT INTO culprits (round, culprits) VALUES (%s, %s)"
+    sql = "INSERT INTO culprits (round, culprits, commit1, commit2, prepare) VALUES (%s, %s, %s, %s, %s)"
     val = params
     mycursor.execute(sql, val)
     mydb.commit()
