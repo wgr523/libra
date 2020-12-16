@@ -261,6 +261,7 @@ impl RoundManager {
             let proposal_msg =
                 ConsensusMsg::ProposalMsg(Box::new(self.generate_proposal(new_round_event).await?));
             let mut network = self.network.clone();
+
             network.broadcast(proposal_msg).await;
             counters::PROPOSALS_COUNT.inc();
         }
@@ -281,6 +282,8 @@ impl RoundManager {
         trace_edge!("parent_proposal", {"block", signed_proposal.parent_id()}, {"block", signed_proposal.id()});
         trace_event!("round_manager::generate_proposal", {"block", signed_proposal.id()});
         debug!(self.new_log(LogEvent::Propose), "{}", signed_proposal);
+        info!("GenerateProposal - round number = {}", signed_proposal.round());
+
         // return proposal
         Ok(ProposalMsg::new(
             signed_proposal,
@@ -296,6 +299,7 @@ impl RoundManager {
             Err(anyhow::anyhow!("Injected error in process_proposal_msg"))
         });
         trace_event!("round_manager::pre_process_proposal", {"block", proposal_msg.proposal().id()});
+        info!("CheckProposal - round number = {}", proposal_msg.proposal().round());
         if self
             .ensure_round_and_sync_up(
                 proposal_msg.proposal().round(),
