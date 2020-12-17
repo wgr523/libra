@@ -61,6 +61,7 @@ def get_logs():
 		with open(log_files[i]) as stream:
 			stream.seek(max(0,fsize-bufsize))
 			the_log = stream.read()
+			the_log = the_log[-bufsize:]
 			sql_update = "UPDATE text SET content='{}' WHERE id='{}'".format(the_log, node)
 			mycursor.execute(sql_update)
 	mydb.commit()
