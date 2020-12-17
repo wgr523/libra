@@ -4,6 +4,8 @@ import requests
 import json
 import mysql.connector
 import threading
+import os
+import time
 
 mydb = mysql.connector.connect(
   host="localhost",
@@ -14,12 +16,20 @@ mydb = mysql.connector.connect(
 
 mycursor = mydb.cursor()
 
+log_files = []
+def get_log_files():
+    global log_files
+    log_files = []
+    for i in range(4):
+        log_files.append("/tmp/libra_swarm/logs/{}.log".format(i))
+
+urls = []
 def get_urls():
+    global urls
     urls = []
     for i in range(4):
         with open("/tmp/libra_swarm/{}/node.yaml".format(i), 'r') as stream:
             urls.append("http://"+yaml.safe_load(stream)['json_rpc']['address'])
-    return urls
 
 def insert(table_name, params):
     sql = "INSERT INTO {} (round, B1, B2, B3) VALUES (%s, %s, %s, %s)".format(table_name)
@@ -73,6 +83,32 @@ get_latest_round_payload = {
 }
 nodes = ["node0", "node1", "node2", "node3"]
 
+def clear_text():
+    sql_drop = "DROP TABLE IF EXISTS text"
+    sql_create = "CREATE TABLE text (id VARCHAR(20) NOT NULL, is_culprit BOOL NOT NULL, content VARCHAR(1024), PRIMARY KEY (id))"
+    # init the entry with default value
+    sql_insert = "INSERT INTO text (id, is_culprit) values ('culprit', 0)"
+    mycursor.execute(sql_drop)
+    mycursor.execute(sql_create)
+    mycursor.execute(sql_insert)
+    global nodes
+    for node in nodes:
+        sql_insert = "INSERT INTO text (id, is_culprit) values ('{}', 0)".format(node)
+        mycursor.execute(sql_insert)
+    mydb.commit()
+
+def get_logs():
+    global nodes
+    global log_files
+    bufsize = 512
+    for i, node in enumerate(nodes):
+        fsize = os.stat(log_files[i]).st_size
+        with open(log_files[i]) as stream:
+            stream.seek(max(0,fsize-bufsize))
+            the_log = stream.read()
+            sql_update = "UPDATE text SET content='{}' WHERE id='{}'".format(the_log, node)
+            mycursor.execute(sql_update)
+    mydb.commit()
 
 def get_qcs_from_rpc_swarm(urls):
     global latest_round
@@ -90,25 +126,40 @@ def get_qcs_from_rpc_swarm(urls):
         for url in urls:
             response = requests.post(url, data=json.dumps(payload), headers=headers).json()
             if len(response["result"])==0:
-                break
-            qc = response["result"][0]
+                hashes.append("err")
+                continue
+            is_nil = response["result"][0]["is_nil"]
+            qc = response["result"][0]["qc"]
             # check round number
             if qc["vote_data"]["proposed"]["round"] == r:
-                hashes.append(qc["vote_data"]["proposed"]["id"][:6])
+                if is_nil:
+                    hashes.append("NIL BLOCK")
+                else:
+                    hashes.append("'"+qc["vote_data"]["proposed"]["id"][:6]+"'")
+            else:
+                hashes.append("err")
         insert_qcs((r, hashes[0], hashes[1], hashes[2], hashes[3]))
         ret.append({"round":r, "node0": hashes[0], "node1": hashes[1], "node2": hashes[2], "node3": hashes[3]})
     latest_round = new_latest_round
-    for node in nodes:
-        insert(node, (r-2, ret[0][node], ret[1][node], ret[2][node]))
+    if r>2 and len(ret)>2:
+        for node in nodes:
+            insert(node, (r-2, ret[0][node], ret[1][node], ret[2][node]))
     return ret
+
 def update():
-    threading.Timer(5.0, update).start()
     delete_qcs(3)
     for node in nodes:
         delete(node, 1)
-    get_qcs_from_rpc_swarm(get_urls())
+    get_qcs_from_rpc_swarm(urls)
+    get_logs()
 
-clear_qcs()
-for node in nodes:
-    clear(node)
-update() 
+if __name__ == "__main__":
+    get_log_files()
+    get_urls()
+    clear_text()
+    clear_qcs()
+    for node in nodes:
+        clear(node)
+    while True:
+        update()
+        time.sleep(5)

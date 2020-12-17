@@ -1,32 +1,84 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use consensus_types::{
     quorum_cert::QuorumCert,
 };
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
-use libra_trace::prelude::*;
 use libra_types::{
     block_info::Round,
 };
 
-use schemadb::{ColumnFamilyName, ReadOptions, SchemaBatch, DB, DEFAULT_CF_NAME};
+use serde::{Deserialize, Serialize};
+use schemadb::{ColumnFamilyName, ReadOptions, SchemaBatch, DB, DEFAULT_CF_NAME, define_schema, schema::{KeyCodec, ValueCodec}};
 use std::{collections::HashMap, iter::Iterator, path::Path, time::Instant};
 use crate::consensusdb::QCSchema;
 use libra_infallible::RwLock;
 
 const QC_CF_NAME: ColumnFamilyName = "quorum_certificate";
+const ISNIL_CF_NAME: ColumnFamilyName = "is_nil";
 
+#[derive(Debug, Eq, PartialEq)]
+/// Struct storing `is nil block` bool
+pub struct IsNil(bool);
+
+impl IsNil {
+    /// Forensic
+    pub fn is_nil(&self) -> bool {
+        self.0
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Eq, PartialEq)]
+/// Forensic QC: qc + is_nil
+pub struct ForensicQuorumCert {
+    ///
+    pub qc: QuorumCert,
+    ///
+    pub is_nil: bool,
+}
+
+impl ForensicQuorumCert {
+    /// New
+    pub fn new(qc: QuorumCert, is_nil: bool) -> Self {
+        Self {qc, is_nil}
+    }
+}
+
+define_schema!(IsNilSchema, HashValue, IsNil, ISNIL_CF_NAME);
+
+impl KeyCodec<IsNilSchema> for HashValue {
+    fn encode_key(&self) -> Result<Vec<u8>> {
+        Ok(self.to_vec())
+    }
+
+    fn decode_key(data: &[u8]) -> Result<Self> {
+        Ok(HashValue::from_slice(data)?)
+    }
+}
+
+impl ValueCodec<IsNilSchema> for IsNil {
+    fn encode_value(&self) -> Result<Vec<u8>> {
+        Ok(vec![self.0 as u8])
+    }
+
+    fn decode_value(data: &[u8]) -> Result<Self> {
+        ensure!(data.len() == 1,"IsNil decoding failure");
+        Ok(IsNil(data[0] != 0))
+    }
+}
 /// Forensic
 pub trait ForensicStorage: Send + Sync {
     /// Forensic
     fn save_quorum_cert(&self, quorum_certs: &[QuorumCert]) -> Result<()>;
     /// Forensic
-    fn get_quorum_cert_at_round(&self, round: Round) -> Result<Vec<QuorumCert>>;
+    fn get_quorum_cert_at_round(&self, round: Round) -> Result<Vec<ForensicQuorumCert>>;
     /// Forensic
     fn get_latest_round(&self) -> Result<Round>;
+    /// Only save hash and is nil
+    fn save_block(&self, hash: &HashValue, is_nil: bool) -> Result<()>;
 }
 
 /// Forensic
@@ -42,6 +94,7 @@ impl ForensicDB {
         let column_families = vec![
             /* UNUSED CF = */ DEFAULT_CF_NAME,
             QC_CF_NAME,
+            ISNIL_CF_NAME,
         ];
 
         let path = db_root_path.as_ref().join("forensicdb");
@@ -73,6 +126,11 @@ impl ForensicDB {
     /// Get QC
     fn get_quorum_cert(&self, hash: &HashValue) -> Result<Option<QuorumCert>> {
         self.db.get::<QCSchema>(hash)
+    }
+
+    /// Get QC
+    fn get_is_nil(&self, hash: &HashValue) -> Result<Option<IsNil>> {
+        self.db.get::<IsNilSchema>(hash)
     }
 }
 
@@ -106,13 +164,16 @@ impl ForensicStorage for ForensicDB {
         Ok(())
     }
 
-    fn get_quorum_cert_at_round(&self, round: u64) -> Result<Vec<QuorumCert>> {
+    fn get_quorum_cert_at_round(&self, round: u64) -> Result<Vec<ForensicQuorumCert>> {
         let round_to_qcs = self.round_to_qcs.read();
         if let Some(hashes) = round_to_qcs.get(&round) {
             let mut v = Vec::new();
-            for h in hashes.iter() {//.map(|h| {
+            for h in hashes.iter() {
                 let qc: Option<QuorumCert> = self.get_quorum_cert(h)?;
-                qc.map(|x|v.push(x));
+                let is_nil: Option<IsNil> = self.get_is_nil(h)?;
+                ensure!(qc.is_some(), "No such QC, round: {}, hash {}.", round, h);
+                ensure!(is_nil.is_some(), "No such IsNil, round: {}, hash {}.", round, h);
+                v.push(ForensicQuorumCert::new(qc.unwrap(),is_nil.unwrap().is_nil()));
             }
             Ok(v)
         } else {
@@ -123,6 +184,12 @@ impl ForensicStorage for ForensicDB {
     fn get_latest_round(&self) -> Result<Round> {
         let latest_round = self.latest_round.read();
         Ok(*latest_round)
+    }
+
+    fn save_block(&self, hash: &HashValue, is_nil: bool) -> Result<()> {
+        let mut batch = SchemaBatch::new();
+        batch.put::<IsNilSchema>(hash, &IsNil(is_nil))?;
+        self.db.write_schemas(batch)
     }
 }
 
@@ -138,10 +205,10 @@ mod test {
         let db = ForensicDB::new(&tmp_dir);
 
         let qcs = vec![certificate_for_genesis()];
-        db.save_quorum_cert(&qcs)
-            .unwrap();
+        db.save_quorum_cert(&qcs).unwrap();
+        db.save_block(&certificate_for_genesis().vote_data().proposed().id(),false).unwrap();
 
         assert_eq!(db.get_quorum_cert_at_round(0).unwrap().len(), 1);
-        assert_eq!(db.get_latest_round(0).unwrap(), 0);
+        assert_eq!(db.get_latest_round().unwrap(), 0);
     }
 }

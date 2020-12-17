@@ -290,11 +290,9 @@ impl PersistentLivenessStorage for StorageWriteProxy {
         let mut trace_batch = vec![];
         for block in blocks.iter() {
             trace_code_block!("consensusdb::save_tree", {"block", block.id()}, trace_batch);
+            self.forensic_db.save_block(&block.id(),block.is_nil_block())?;
         }
         self.forensic_db.save_quorum_cert(&quorum_certs)?;
-        for qc in quorum_certs.iter() {
-            info!("{{\"quorum_cert\":{}}}", serde_json::to_string(&qc).unwrap());//TODO this can be deleted
-        }
         Ok(self
             .db
             .save_blocks_and_quorum_certificates(blocks, quorum_certs)?)

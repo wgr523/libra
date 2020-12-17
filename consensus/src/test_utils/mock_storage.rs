@@ -155,6 +155,7 @@ impl PersistentLivenessStorage for MockStorage {
         let should_check_for_consistency = !(self.shared_storage.block.lock().is_empty()
             && self.shared_storage.qc.lock().is_empty());
         for block in blocks {
+            info!("{{\"block_hash\":\"{:x}\",\"is_nil\":{}}}", block.id(), block.is_nil_block());
             self.shared_storage.block.lock().insert(block.id(), block);
         }
         for qc in quorum_certs {
