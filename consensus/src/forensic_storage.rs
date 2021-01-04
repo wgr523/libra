@@ -25,23 +25,23 @@ const ISNIL_CF_NAME: ColumnFamilyName = "is_nil";
 pub struct IsNil(bool);
 
 impl IsNil {
-    /// Forensic
+    /// return bool is_nil
     pub fn is_nil(&self) -> bool {
         self.0
     }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Eq, PartialEq)]
-/// Forensic QC: qc + is_nil
+/// Forensic QC: qc + is_nil. for convenient access to is_nil of a block and the qc for that block.
 pub struct ForensicQuorumCert {
-    ///
+    /// the QC
     pub qc: QuorumCert,
-    ///
+    /// is_nil
     pub is_nil: bool,
 }
 
 impl ForensicQuorumCert {
-    /// New
+    /// create a new data structure ForensicQuorumCert
     pub fn new(qc: QuorumCert, is_nil: bool) -> Self {
         Self {qc, is_nil}
     }
@@ -69,19 +69,19 @@ impl ValueCodec<IsNilSchema> for IsNil {
         Ok(IsNil(data[0] != 0))
     }
 }
-/// Forensic
+/// Forensic Storage trait that serves as the storage of information necessary for forensics
 pub trait ForensicStorage: Send + Sync {
-    /// Forensic
+    /// save a qc
     fn save_quorum_cert(&self, quorum_certs: &[QuorumCert]) -> Result<()>;
-    /// Forensic
+    /// get a vec of qc at a round
     fn get_quorum_cert_at_round(&self, round: Round) -> Result<Vec<ForensicQuorumCert>>;
-    /// Forensic
+    /// get the latest round known
     fn get_latest_round(&self) -> Result<Round>;
     /// Only save hash and is nil
     fn save_block(&self, hash: &HashValue, is_nil: bool) -> Result<()>;
 }
 
-/// Forensic
+/// Forensic DB, persistent database that implements forensic storage
 pub struct ForensicDB {
     db: DB,
     round_to_qcs: RwLock<HashMap<Round,Vec<HashValue>>>,
@@ -89,7 +89,7 @@ pub struct ForensicDB {
 }
 
 impl ForensicDB {
-    /// Forensic
+    /// new forensic DB
     pub fn new<P: AsRef<Path> + Clone>(db_root_path: P) -> Self {
         let column_families = vec![
             /* UNUSED CF = */ DEFAULT_CF_NAME,
@@ -123,12 +123,12 @@ impl ForensicDB {
         Self { db, round_to_qcs, latest_round }
     }
 
-    /// Get QC
+    /// Get qc given hash
     fn get_quorum_cert(&self, hash: &HashValue) -> Result<Option<QuorumCert>> {
         self.db.get::<QCSchema>(hash)
     }
 
-    /// Get QC
+    /// Get is_nil given hash
     fn get_is_nil(&self, hash: &HashValue) -> Result<Option<IsNil>> {
         self.db.get::<IsNilSchema>(hash)
     }

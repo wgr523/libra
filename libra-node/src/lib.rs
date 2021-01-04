@@ -290,7 +290,7 @@ pub fn setup_environment(node_config: &NodeConfig, logger: Option<Arc<Logger>>) 
         Arc::clone(&libra_db),
     );
 
-    // start forensic db
+    // Create forensic db
     let forensic_db = ForensicDB::new(&node_config.storage.dir().join(PathBuf::from("forensic")));
     let forensic_db = Arc::new(forensic_db);
 

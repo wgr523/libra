@@ -596,7 +596,7 @@ async fn get_network_status(service: JsonRpcService, _request: JsonRpcRequest) -
     Ok(peers.get() as u64)
 }
 
-/// Test rpc, echo the integer
+/// Forensic rpc, get the latest round
 async fn forensic_get_latest_round(
     service: JsonRpcService,
     _request: JsonRpcRequest,
@@ -604,7 +604,7 @@ async fn forensic_get_latest_round(
     service.forensic_db.get_latest_round()
 }
 
-/// Test: read qc at round 1
+/// Forensic rpc, get a vec of forensic qc at round
 async fn forensic_get_quorum_cert_at_round(
     service: JsonRpcService,
     request: JsonRpcRequest,

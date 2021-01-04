@@ -39,7 +39,7 @@ mod util;
 pub mod consensus_provider;
 /// LibraNet interface.
 pub mod network_interface;
-/// Forensic
+/// Forensics related traits and structs
 pub mod forensic_storage;
 
 #[cfg(feature = "fuzzing")]
